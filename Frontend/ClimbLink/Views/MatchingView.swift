@@ -8,7 +8,7 @@
 import SwiftUI
 
 struct MatchingView: View {
-    @State private var partners: [ClimbingPartner] = ClimbingPartner.samplePartners
+    @StateObject private var viewModel = PartnerStackViewModel()
     @State private var currentIndex: Int = 0
     @State private var dragOffset: CGSize = .zero
     @State private var rotation: Double = 0
@@ -59,8 +59,27 @@ struct MatchingView: View {
                 
                 // Card Stack
                 ZStack {
-                    if currentIndex < partners.count {
-                        ForEach(Array(partners.enumerated()), id: \.element.id) { index, partner in
+                    if viewModel.isLoading {
+                        ProgressView("Finding climbers...")
+                            .progressViewStyle(CircularProgressViewStyle(tint: .blue))
+                    } else if let errorMessage = viewModel.errorMessage {
+                        VStack(spacing: 16) {
+                            Image(systemName: "exclamationmark.triangle")
+                                .font(.system(size: 48))
+                                .foregroundColor(.orange)
+                            Text(errorMessage)
+                                .font(.headline)
+                                .multilineTextAlignment(.center)
+                            Button("Retry") {
+                                Task {
+                                    await viewModel.loadStack(force: true)
+                                }
+                            }
+                            .buttonStyle(.borderedProminent)
+                        }
+                        .padding()
+                    } else if currentIndex < viewModel.partners.count {
+                        ForEach(Array(viewModel.partners.enumerated()), id: \.element.id) { index, partner in
                             if index >= currentIndex && index < currentIndex + 3 {
                                 SwipeableCard(
                                     partner: partner,
@@ -70,7 +89,7 @@ struct MatchingView: View {
                                         handleSwipe(liked: liked, partner: partner)
                                     }
                                 )
-                                .zIndex(Double(partners.count - index))
+                                .zIndex(Double(viewModel.partners.count - index))
                                 .scaleEffect(index == currentIndex ? 1.0 : 0.95 - Double(index - currentIndex) * 0.05)
                                 .offset(y: CGFloat(index - currentIndex) * 10)
                             }
@@ -102,7 +121,7 @@ struct MatchingView: View {
                 .padding(.horizontal)
                 
                 // Action Buttons
-                if currentIndex < partners.count {
+                if currentIndex < viewModel.partners.count {
                     HStack(spacing: 40) {
                         // Pass Button
                         Button(action: {
@@ -137,12 +156,20 @@ struct MatchingView: View {
         .sheet(isPresented: $showMatches) {
             MatchesView(matches: matches)
         }
+        .task {
+            await viewModel.loadStack()
+        }
+        .onChange(of: viewModel.partners) { _ in
+            currentIndex = 0
+            dragOffset = .zero
+            rotation = 0
+        }
     }
     
     private func swipeCard(liked: Bool) {
-        guard currentIndex < partners.count else { return }
+        guard currentIndex < viewModel.partners.count else { return }
         
-        let partner = partners[currentIndex]
+        let partner = viewModel.partners[currentIndex]
         
         withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
             dragOffset = CGSize(width: liked ? 1000 : -1000, height: 0)
@@ -168,5 +195,4 @@ struct MatchingView: View {
         rotation = 0
     }
 }
-
 
