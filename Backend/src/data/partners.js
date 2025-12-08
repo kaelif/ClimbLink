@@ -2,7 +2,7 @@
 const partnersStack = [
   {
     id: '550e8400-e29b-41d4-a716-446655440001',
-    name: 'Alex',
+    name: 'AlexDummy',
     age: 28,
     bio: 'Love outdoor bouldering and sport climbing. Always up for a weekend adventure!',
     skillLevel: 'Advanced',
@@ -14,7 +14,7 @@ const partnersStack = [
   },
   {
     id: '550e8400-e29b-41d4-a716-446655440002',
-    name: 'Jordan',
+    name: 'JordanDummy',
     age: 32,
     bio: 'Indoor climber looking to transition to outdoor. Patient and supportive partner!',
     skillLevel: 'Intermediate',
