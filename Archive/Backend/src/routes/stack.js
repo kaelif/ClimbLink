@@ -1,5 +1,13 @@
 const express = require('express');
+// ============================================
+// DATABASE MODE
+// ============================================
 const { getStack } = require('../repositories/profiles');
+
+// ============================================
+// DUMMY DATA MODE (commented out - using database)
+// ============================================
+// const partnersStack = require('../data/partners');
 
 const router = express.Router();
 
@@ -25,6 +33,19 @@ const router = express.Router();
  */
 router.get('/getStack', async (req, res, next) => {
   try {
+    // ============================================
+    // DUMMY DATA MODE (commented out - using database)
+    // ============================================
+    /*
+    res.json({
+      stack: partnersStack,
+      count: partnersStack.length,
+    });
+    */
+
+    // ============================================
+    // DATABASE MODE
+    // ============================================
     // Extract user profile from query parameters or use defaults
     const userProfile = {
       userId: req.query.userId || null,

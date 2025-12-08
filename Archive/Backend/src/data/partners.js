@@ -1,8 +1,7 @@
-const { v4: uuidv4 } = require('uuid');
-
+// Use fixed UUIDs so they're consistent across requests
 const partnersStack = [
   {
-    id: uuidv4(),
+    id: '550e8400-e29b-41d4-a716-446655440001',
     name: 'Alex',
     age: 28,
     bio: 'Love outdoor bouldering and sport climbing. Always up for a weekend adventure!',
@@ -14,7 +13,7 @@ const partnersStack = [
     favoriteCrag: 'Eldorado Canyon',
   },
   {
-    id: uuidv4(),
+    id: '550e8400-e29b-41d4-a716-446655440002',
     name: 'Jordan',
     age: 32,
     bio: 'Indoor climber looking to transition to outdoor. Patient and supportive partner!',
@@ -26,7 +25,7 @@ const partnersStack = [
     favoriteCrag: null,
   },
   {
-    id: uuidv4(),
+    id: '550e8400-e29b-41d4-a716-446655440003',
     name: 'Sam',
     age: 25,
     bio: 'Trad climber with 5 years experience. Safety first, fun always!',
@@ -38,7 +37,7 @@ const partnersStack = [
     favoriteCrag: 'The Garden of the Gods',
   },
   {
-    id: uuidv4(),
+    id: '550e8400-e29b-41d4-a716-446655440004',
     name: 'Casey',
     age: 29,
     bio: 'Bouldering enthusiast! Love challenging problems and good vibes.',
@@ -50,7 +49,7 @@ const partnersStack = [
     favoriteCrag: 'Horsetooth Reservoir',
   },
   {
-    id: uuidv4(),
+    id: '550e8400-e29b-41d4-a716-446655440005',
     name: 'Morgan',
     age: 35,
     bio: 'Multi-pitch enthusiast. Looking for reliable partners for big wall adventures.',
