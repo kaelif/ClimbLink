@@ -1,4 +1,7 @@
-const pool = require('../db/pool');
+// ============================================
+// DATABASE MODE (commented out - uncomment to use database)
+// ============================================
+// const pool = require('../db/pool');
 
 /**
  * Get a stack of profiles that match the user's criteria
@@ -38,17 +41,70 @@ async function getStack(userProfile = {}) {
     wantsOutdoor = true,
   } = userProfile;
 
-  // Build the WHERE clause for gender preference matching
-  let genderFilter = '';
+  // Build query conditions and parameters
+  const conditions = [];
+  const params = [latitude, longitude];
+  let paramIndex = 3;
+
+  // Exclude current user if provided
+  if (userId) {
+    conditions.push(`p.id != $${paramIndex}`);
+    params.push(userId);
+    paramIndex++;
+  }
+
+  // Age range match: partner's age must be within user's preference range
+  conditions.push(`p.age >= $${paramIndex}`);
+  params.push(minAgePreference);
+  paramIndex++;
+  
+  conditions.push(`p.age <= $${paramIndex}`);
+  params.push(maxAgePreference);
+  paramIndex++;
+
+  // Gender preference match (user's preference for partner's gender)
   if (genderPreference === 'men') {
-    genderFilter = "AND p.gender = 'man'";
+    conditions.push(`p.gender = 'man'`);
   } else if (genderPreference === 'women') {
-    genderFilter = "AND p.gender = 'woman'";
+    conditions.push(`p.gender = 'woman'`);
   }
   // 'all genders' means no filter
 
-  // Build the WHERE clause for climbing type matching
-  // User wants partners who DO these types (does_* columns)
+  // Partner's preferences must match user's age
+  conditions.push(`p.min_age_preference <= $${paramIndex}`);
+  params.push(age);
+  paramIndex++;
+  
+  conditions.push(`p.max_age_preference >= $${paramIndex}`);
+  params.push(age);
+  paramIndex++;
+
+  // Partner's gender preference must include user's gender
+  const genderMap = {
+    'man': 'men',
+    'woman': 'women',
+    'non-binary': 'all genders',
+    'prefer not to say': 'all genders'
+  };
+  const userGenderPreference = genderMap[gender] || 'all genders';
+  
+  if (userGenderPreference === 'all genders') {
+    // Partner accepts all genders, no filter needed
+  } else {
+    conditions.push(`(p.gender_preference = 'all genders' OR p.gender_preference = $${paramIndex})`);
+    params.push(userGenderPreference);
+    paramIndex++;
+  }
+
+  // Distance filter: within user's max distance
+  conditions.push(`calculate_distance_km($1, $2, p.latitude, p.longitude) <= $${paramIndex}`);
+  params.push(maxDistanceKm);
+  paramIndex++;
+
+  // Partner's max distance must include user (calculated inline)
+  conditions.push(`(p.max_distance_km IS NULL OR p.max_distance_km >= calculate_distance_km($1, $2, p.latitude, p.longitude))`);
+
+  // Climbing type matching: User wants partners who DO these types
   const climbingTypeConditions = [];
   if (wantsTrad) {
     climbingTypeConditions.push('p.does_trad = true');
@@ -67,30 +123,25 @@ async function getStack(userProfile = {}) {
   }
 
   // If user wants specific types, at least one must match
-  const climbingTypeFilter = climbingTypeConditions.length > 0
-    ? `AND (${climbingTypeConditions.join(' OR ')})`
-    : '';
-
-  // Build the WHERE clause for partner's preferences matching the user
-  // Partner must want the user's climbing types (wants_* columns)
-  const partnerPreferenceConditions = [];
-  if (wantsTrad || wantsSport || wantsBouldering || wantsIndoor || wantsOutdoor) {
-    // Check if partner wants any of the types the user does
-    const userDoesTypes = [];
-    if (wantsTrad) userDoesTypes.push('p.wants_trad = true');
-    if (wantsSport) userDoesTypes.push('p.wants_sport = true');
-    if (wantsBouldering) userDoesTypes.push('p.wants_bouldering = true');
-    if (wantsIndoor) userDoesTypes.push('p.wants_indoor = true');
-    if (wantsOutdoor) userDoesTypes.push('p.wants_outdoor = true');
-    
-    if (userDoesTypes.length > 0) {
-      partnerPreferenceConditions.push(`(${userDoesTypes.join(' OR ')})`);
-    }
+  if (climbingTypeConditions.length > 0) {
+    conditions.push(`(${climbingTypeConditions.join(' OR ')})`);
   }
 
-  const partnerPreferenceFilter = partnerPreferenceConditions.length > 0
-    ? `AND ${partnerPreferenceConditions.join(' AND ')}`
-    : '';
+  // Partner's preferences: Partner must want at least one type the user does
+  const partnerWantsConditions = [];
+  if (wantsTrad) partnerWantsConditions.push('p.wants_trad = true');
+  if (wantsSport) partnerWantsConditions.push('p.wants_sport = true');
+  if (wantsBouldering) partnerWantsConditions.push('p.wants_bouldering = true');
+  if (wantsIndoor) partnerWantsConditions.push('p.wants_indoor = true');
+  if (wantsOutdoor) partnerWantsConditions.push('p.wants_outdoor = true');
+  
+  if (partnerWantsConditions.length > 0) {
+    conditions.push(`(${partnerWantsConditions.join(' OR ')})`);
+  }
+
+  // Both user and partner must have location data
+  conditions.push('p.latitude IS NOT NULL');
+  conditions.push('p.longitude IS NOT NULL');
 
   const query = `
     SELECT 
@@ -105,41 +156,17 @@ async function getStack(userProfile = {}) {
       p.profile_image_name as "profileImageName",
       p.availability,
       p.favorite_crag as "favoriteCrag",
+      p.does_trad,
+      p.does_sport,
+      p.does_bouldering,
+      p.does_indoor,
+      p.does_outdoor,
       calculate_distance_km($1, $2, p.latitude, p.longitude) as distance_km
     FROM profiles p
-    WHERE 
-      -- Exclude the current user if userId is provided
-      ${userId ? `p.id != $${userId ? '3' : '1'} AND` : ''}
-      -- Age range match: partner's age must be within user's preference range
-      p.age >= $${userId ? '4' : '3'} AND p.age <= $${userId ? '5' : '4'}
-      -- Gender preference match
-      ${genderFilter}
-      -- Partner's preferences must match user's age
-      AND p.min_age_preference <= $${userId ? '6' : '5'} 
-      AND p.max_age_preference >= $${userId ? '6' : '5'}
-      -- Partner's gender preference must include user's gender
-      AND (
-        p.gender_preference = 'all genders' OR
-        (p.gender_preference = 'men' AND $${userId ? '7' : '6'} IN ('man')) OR
-        (p.gender_preference = 'women' AND $${userId ? '7' : '6'} IN ('woman'))
-      )
-      -- Distance filter: within user's max distance
-      AND calculate_distance_km($1, $2, p.latitude, p.longitude) <= $${userId ? '8' : '7'}
-      -- Partner's max distance must include user
-      AND (p.max_distance_km IS NULL OR p.max_distance_km >= calculate_distance_km($1, $2, p.latitude, p.longitude))
-      -- Climbing type matching
-      ${climbingTypeFilter}
-      ${partnerPreferenceFilter}
-      -- Both user and partner must have location data
-      AND p.latitude IS NOT NULL 
-      AND p.longitude IS NOT NULL
+    WHERE ${conditions.join(' AND ')}
     ORDER BY distance_km ASC, p.created_at DESC
     LIMIT 50
   `;
-
-  const params = userId
-    ? [latitude, longitude, userId, minAgePreference, maxAgePreference, age, gender, maxDistanceKm]
-    : [latitude, longitude, minAgePreference, maxAgePreference, age, gender, maxDistanceKm];
 
   try {
     const { rows } = await pool.query(query, params);

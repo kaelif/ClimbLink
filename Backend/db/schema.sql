@@ -39,3 +39,4 @@ BEFORE UPDATE ON profiles
 FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 
 
+

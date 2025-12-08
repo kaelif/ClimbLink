@@ -1,17 +1,16 @@
--- Create ClimbLink database
--- Run this first: psql -U postgres -f create_database.sql
+-- Create profiles table for ClimbLink
+-- Run this after creating the database and enabling UUID extension
+-- Usage: psql -U postgres -d climblink -f create_profiles_table.sql
 
-CREATE DATABASE climblink;
-
--- Connect to the database
-\c climblink
-
--- Enable UUID extension
+-- Enable UUID extension (if not already enabled)
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
+-- Drop table if exists (use with caution in production)
+-- DROP TABLE IF EXISTS profiles CASCADE;
+
 -- Create profiles table
--- This table stores both user profiles and their preferences for matching
-CREATE TABLE IF NOT EXISTS profiles (
+CREATE TABLE profiles (
+    -- Primary key
     id                  UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     
     -- User profile information
@@ -47,17 +46,19 @@ CREATE TABLE IF NOT EXISTS profiles (
     does_indoor         BOOLEAN NOT NULL DEFAULT FALSE,
     does_outdoor        BOOLEAN NOT NULL DEFAULT FALSE,
     
+    -- Timestamps
     created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at          TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
--- Add index for location-based queries
-CREATE INDEX IF NOT EXISTS idx_profiles_location ON profiles(latitude, longitude);
+-- Create indexes for better query performance
+CREATE INDEX idx_profiles_location ON profiles(latitude, longitude);
+CREATE INDEX idx_profiles_age ON profiles(age);
+CREATE INDEX idx_profiles_gender ON profiles(gender);
+CREATE INDEX idx_profiles_gender_preference ON profiles(gender_preference);
+CREATE INDEX idx_profiles_created_at ON profiles(created_at);
 
--- Add index for age range queries
-CREATE INDEX IF NOT EXISTS idx_profiles_age ON profiles(age);
-
--- Function to calculate distance in kilometers using Haversine formula
+-- Create function to calculate distance in kilometers using Haversine formula
 CREATE OR REPLACE FUNCTION calculate_distance_km(
     lat1 DECIMAL, lon1 DECIMAL,
     lat2 DECIMAL, lon2 DECIMAL
@@ -82,7 +83,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
--- Update updated_at automatically
+-- Create function to automatically update updated_at timestamp
 CREATE OR REPLACE FUNCTION set_updated_at()
 RETURNS TRIGGER AS $$
 BEGIN
@@ -91,9 +92,25 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+-- Create trigger to automatically update updated_at on row updates
 DROP TRIGGER IF EXISTS trg_profiles_updated_at ON profiles;
 CREATE TRIGGER trg_profiles_updated_at
 BEFORE UPDATE ON profiles
 FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 
+-- Add comments for documentation
+COMMENT ON TABLE profiles IS 'Stores user profiles and their matching preferences for climbing partners';
+COMMENT ON COLUMN profiles.id IS 'Unique identifier for each profile';
+COMMENT ON COLUMN profiles.latitude IS 'Latitude coordinate for distance calculations';
+COMMENT ON COLUMN profiles.longitude IS 'Longitude coordinate for distance calculations';
+COMMENT ON COLUMN profiles.wants_trad IS 'User wants partners who do traditional climbing';
+COMMENT ON COLUMN profiles.wants_sport IS 'User wants partners who do sport climbing';
+COMMENT ON COLUMN profiles.wants_bouldering IS 'User wants partners who do bouldering';
+COMMENT ON COLUMN profiles.wants_indoor IS 'User wants partners who climb indoors';
+COMMENT ON COLUMN profiles.wants_outdoor IS 'User wants partners who climb outdoors';
+COMMENT ON COLUMN profiles.does_trad IS 'User does traditional climbing';
+COMMENT ON COLUMN profiles.does_sport IS 'User does sport climbing';
+COMMENT ON COLUMN profiles.does_bouldering IS 'User does bouldering';
+COMMENT ON COLUMN profiles.does_indoor IS 'User climbs indoors';
+COMMENT ON COLUMN profiles.does_outdoor IS 'User climbs outdoors';
 

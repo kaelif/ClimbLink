@@ -1,3 +1,7 @@
+// ============================================
+// DATABASE CONNECTION (commented out - uncomment to use database)
+// ============================================
+/*
 const { Pool } = require('pg');
 require('dotenv').config();
 
@@ -17,4 +21,6 @@ pool.on('error', (err) => {
 });
 
 module.exports = pool;
+*/
+
 

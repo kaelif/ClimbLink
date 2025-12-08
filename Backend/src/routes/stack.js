@@ -1,5 +1,13 @@
 const express = require('express');
-const { getStack } = require('../repositories/profiles');
+// ============================================
+// DATABASE MODE (commented out - uncomment to use database)
+// ============================================
+// const { getStack } = require('../repositories/profiles');
+
+// ============================================
+// DUMMY DATA MODE (currently active)
+// ============================================
+const partnersStack = require('../data/partners');
 
 const router = express.Router();
 
@@ -25,6 +33,18 @@ const router = express.Router();
  */
 router.get('/getStack', async (req, res, next) => {
   try {
+    // ============================================
+    // DUMMY DATA MODE (currently active)
+    // ============================================
+    res.json({
+      stack: partnersStack,
+      count: partnersStack.length,
+    });
+
+    // ============================================
+    // DATABASE MODE (commented out - uncomment to use database)
+    // ============================================
+    /*
     // Extract user profile from query parameters or use defaults
     const userProfile = {
       userId: req.query.userId || null,
@@ -49,6 +69,7 @@ router.get('/getStack', async (req, res, next) => {
       stack,
       count: stack.length,
     });
+    */
   } catch (error) {
     console.error('Error in getStack endpoint:', error);
     next(error);

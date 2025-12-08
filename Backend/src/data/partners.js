@@ -66,3 +66,4 @@ const partnersStack = [
 module.exports = partnersStack;
 
 
+
