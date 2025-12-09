@@ -1,52 +1,85 @@
-# Environment variables and secrets
-.env
-.env.local
-.env.*.local
-*.env
-
-# Node.js
+# Dependencies
 node_modules/
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 package-lock.json
+yarn.lock
 .pnpm-debug.log*
 
-# Database
-*.db
-*.sqlite
-*.sqlite3
-dev.db
+# Environment variables and secrets
+.env
+.env.local
+.env.development
+.env.production
+.env.test
+.env.*.local
+*.env
+*.pem
+*.key
+*.cert
 
-# Prisma
-/generated/prisma
-prisma/migrations/
-
-# macOS
+# OS files
 .DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
 .AppleDouble
 .LSOverride
-._*
+ehthumbs.db
+Thumbs.db
+Desktop.ini
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.project
+.classpath
+.settings/
+*.sublime-project
+*.sublime-workspace
+
+# Build artifacts
+dist/
+build/
+*.log
+*.pid
+*.seed
+*.pid.lock
+*.o
+*.a
+
+# Database
+*.sqlite
+*.sqlite3
+*.db
+dev.db
+
+# Prisma (if used)
+/generated/prisma
+.prisma/
+prisma/migrations/
 
 # Xcode
 *.xcodeproj/*
 !*.xcodeproj/project.pbxproj
 !*.xcodeproj/xcshareddata/
+*.xcworkspace/*
 !*.xcworkspace/contents.xcworkspacedata
+!*.xcworkspace/xcshareddata/
+xcuserdata/
 *.xcuserstate
 *.xcuserdatad/
-xcuserdata/
-*.xcscmblueprint
-*.xccheckout
-*.moved-aside
-DerivedData/
 *.hmap
 *.ipa
 *.dSYM.zip
 *.dSYM
-*.swp
-*~.nib
-build/
+DerivedData/
+*.moved-aside
 *.pbxuser
 !default.pbxuser
 *.mode1v3
@@ -55,8 +88,11 @@ build/
 !default.mode2v3
 *.perspectivev3
 !default.perspectivev3
-*.xcworkspace
-!*.xcworkspace/contents.xcworkspacedata
+*.xccheckout
+*.xcplayground
+*.xcworkspace/xcuserdata/
+*.xcworkspace/xcshareddata/swiftpm/
+*.xcworkspace/xcshareddata/swiftpm/configuration/
 *.xcbreakpoint
 *.xcbkptlist
 
@@ -65,32 +101,9 @@ build/
 .build/
 *.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/
 
-# IDE
-.idea/
-.vscode/
-*.swp
-*.swo
-*~
-.project
-.classpath
-.settings/
-
-# Logs
-logs/
-*.log
-
-# OS
-Thumbs.db
-ehthumbs.db
-Desktop.ini
-
 # Temporary files
 *.tmp
 *.temp
 .cache/
-
-# Build artifacts
-dist/
-build/
-*.o
-*.a
+tmp/
+temp/
