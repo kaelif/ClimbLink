@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+import UIKit
 
 struct MatchingView: View {
     @StateObject private var viewModel = PartnerStackViewModel()
@@ -14,6 +15,18 @@ struct MatchingView: View {
     @State private var rotation: Double = 0
     @State private var matches: [ClimbingPartner] = []
     @State private var showMatches = false
+    @State private var showEditProfile = false
+    
+    private let swipeService = SwipeService()
+    
+    private var deviceId: String {
+        if let saved = UserDefaults.standard.string(forKey: "deviceId") {
+            return saved
+        }
+        let id = UIDevice.current.identifierForVendor?.uuidString ?? UUID().uuidString
+        UserDefaults.standard.set(id, forKey: "deviceId")
+        return id
+    }
     
     var body: some View {
         ZStack {
@@ -35,22 +48,32 @@ struct MatchingView: View {
                     
                     Spacer()
                     
-                    Button(action: {
-                        showMatches.toggle()
-                    }) {
-                        ZStack(alignment: .topTrailing) {
-                            Image(systemName: "heart.fill")
+                    HStack(spacing: 16) {
+                        Button(action: {
+                            showEditProfile.toggle()
+                        }) {
+                            Image(systemName: "person.circle")
                                 .font(.title2)
-                                .foregroundColor(.red)
-                            
-                            if !matches.isEmpty {
-                                Text("\(matches.count)")
-                                    .font(.caption2)
-                                    .fontWeight(.bold)
-                                    .foregroundColor(.white)
-                                    .padding(4)
-                                    .background(Circle().fill(Color.blue))
-                                    .offset(x: 8, y: -8)
+                                .foregroundColor(.blue)
+                        }
+                        
+                        Button(action: {
+                            showMatches.toggle()
+                        }) {
+                            ZStack(alignment: .topTrailing) {
+                                Image(systemName: "heart.fill")
+                                    .font(.title2)
+                                    .foregroundColor(.red)
+                                
+                                if !matches.isEmpty {
+                                    Text("\(matches.count)")
+                                        .font(.caption2)
+                                        .fontWeight(.bold)
+                                        .foregroundColor(.white)
+                                        .padding(4)
+                                        .background(Circle().fill(Color.blue))
+                                        .offset(x: 8, y: -8)
+                                }
                             }
                         }
                     }
@@ -156,8 +179,11 @@ struct MatchingView: View {
         .sheet(isPresented: $showMatches) {
             MatchesView(matches: matches)
         }
+        .sheet(isPresented: $showEditProfile) {
+            EditProfileView(deviceId: deviceId)
+        }
         .task {
-            await viewModel.loadStack()
+            await viewModel.loadStack(deviceId: deviceId)
         }
         .onChange(of: viewModel.partners) { _ in
             currentIndex = 0
@@ -182,11 +208,28 @@ struct MatchingView: View {
     }
     
     private func handleSwipe(liked: Bool, partner: ClimbingPartner) {
-        if liked {
-            // Simulate match (in real app, this would check if they also liked you)
-            let didMatch = Bool.random() // Simulated match logic
-            if didMatch {
-                matches.append(partner)
+        // Record the swipe in the database
+        Task {
+            do {
+                let action: SwipeAction = liked ? .like : .pass
+                try await swipeService.recordSwipe(
+                    swiperDeviceId: deviceId,
+                    swipedProfileId: partner.id,
+                    action: action
+                )
+                
+                // If liked, check for match (simulated for now)
+                if liked {
+                    let didMatch = Bool.random() // Simulated match logic
+                    if didMatch {
+                        await MainActor.run {
+                            matches.append(partner)
+                        }
+                    }
+                }
+            } catch {
+                print("Error recording swipe: \(error)")
+                // Continue anyway - don't block the UI
             }
         }
         

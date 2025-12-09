@@ -39,7 +39,7 @@ enum ClimbingPartnerError: LocalizedError {
 }
 
 protocol ClimbingPartnerProviding {
-    func fetchStack() async throws -> [ClimbingPartner]
+    func fetchStack(deviceId: String?) async throws -> [ClimbingPartner]
 }
 
 struct ClimbingPartnerService: ClimbingPartnerProviding {
@@ -51,8 +51,13 @@ struct ClimbingPartnerService: ClimbingPartnerProviding {
         self.session = session
     }
     
-    func fetchStack() async throws -> [ClimbingPartner] {
-        var request = URLRequest(url: baseURL.appendingPathComponent("getStack"))
+    func fetchStack(deviceId: String? = nil) async throws -> [ClimbingPartner] {
+        var urlComponents = URLComponents(url: baseURL.appendingPathComponent("getStack"), resolvingAgainstBaseURL: false)!
+        if let deviceId = deviceId {
+            urlComponents.queryItems = [URLQueryItem(name: "deviceId", value: deviceId)]
+        }
+        
+        var request = URLRequest(url: urlComponents.url!)
         request.httpMethod = "GET"
         request.setValue("application/json", forHTTPHeaderField: "Accept")
         request.timeoutInterval = 10
@@ -101,7 +106,7 @@ final class PartnerStackViewModel: ObservableObject {
         self.service = service
     }
     
-    func loadStack(force: Bool = false) async {
+    func loadStack(deviceId: String? = nil, force: Bool = false) async {
         guard !isLoading else { return }
         if partners.isEmpty || force {
             isLoading = true
@@ -109,7 +114,7 @@ final class PartnerStackViewModel: ObservableObject {
             
             do {
                 errorMessage = nil
-                partners = try await service.fetchStack()
+                partners = try await service.fetchStack(deviceId: deviceId)
             } catch let error as ClimbingPartnerError {
                 errorMessage = error.errorDescription ?? "Unable to load partners. Please try again."
                 partners = []

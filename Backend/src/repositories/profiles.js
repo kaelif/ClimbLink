@@ -47,14 +47,54 @@ function transformProfile(profile) {
 }
 
 /**
- * Fetch all profiles from the database
+ * Transform frontend profile to database format
  */
-async function getStack() {
+function transformProfileToDb(profile) {
+  return {
+    name: profile.name,
+    age: profile.age,
+    bio: profile.bio || '',
+    skill_level: profile.skillLevel || 'Intermediate',
+    location: profile.location || 'Unknown',
+    profile_image_name: profile.profileImageName || 'person.circle.fill',
+    availability: profile.availability || 'Flexible',
+    favorite_crag: profile.favoriteCrag || null,
+    does_bouldering: profile.preferredTypes?.includes('Bouldering') || false,
+    does_sport: profile.preferredTypes?.includes('Sport Climbing') || false,
+    does_trad: profile.preferredTypes?.includes('Traditional') || false,
+    does_indoor: profile.preferredTypes?.includes('Indoor') || false,
+    does_outdoor: profile.preferredTypes?.includes('Outdoor') || false,
+  };
+}
+
+/**
+ * Fetch profiles from the database, excluding user's own profile and passed profiles
+ * @param {string} deviceId - Device ID of the current user
+ */
+async function getStack(deviceId = null) {
   try {
-    const { data, error } = await supabase
+    let query = supabase
       .from('profiles')
-      .select('*')
-      .order('created_at', { ascending: false });
+      .select('*');
+
+    // Exclude user's own profile if deviceId is provided
+    if (deviceId) {
+      query = query.neq('device_id', deviceId);
+    }
+
+    // Get passed profile IDs to exclude them
+    let passedProfileIds = [];
+    if (deviceId) {
+      const { getPassedProfileIds } = require('./swipes');
+      try {
+        passedProfileIds = await getPassedProfileIds(deviceId);
+      } catch (error) {
+        // If swipes table doesn't exist yet, just log and continue
+        console.warn('Could not fetch passed profiles (swipes table may not exist):', error.message);
+      }
+    }
+
+    const { data, error } = await query.order('created_at', { ascending: false });
 
     if (error) {
       console.error('Error fetching profiles from Supabase:', error);
@@ -66,14 +106,111 @@ async function getStack() {
       return [];
     }
 
+    // Filter out passed profiles
+    let filteredData = data;
+    if (passedProfileIds.length > 0) {
+      filteredData = data.filter(profile => {
+        // Get the integer ID of the profile
+        const profileId = typeof profile.id === 'number' ? profile.id : parseInt(String(profile.id), 10);
+        // Check if this profile ID is in the passed list
+        return !passedProfileIds.includes(profileId);
+      });
+    }
+
     // Transform database profiles to frontend format
-    return data.map(transformProfile);
+    return filteredData.map(transformProfile);
   } catch (error) {
     console.error('Error in getStack:', error);
     throw error;
   }
 }
 
+/**
+ * Get or create user profile by device ID
+ */
+async function getOrCreateUserProfile(deviceId) {
+  try {
+    // First, try to find existing profile by device_id
+    const { data: existing, error: findError } = await supabase
+      .from('profiles')
+      .select('*')
+      .eq('device_id', deviceId)
+      .single();
+
+    if (existing && !findError) {
+      return transformProfile(existing);
+    }
+
+    // If not found, create a new profile with generic data
+    const defaultProfile = {
+      device_id: deviceId,
+      name: 'New Climber',
+      age: 25,
+      gender: 'non-binary', // Required field - default to non-binary
+      bio: 'Just getting started with climbing!',
+      skill_level: 'Beginner',
+      location: 'Unknown',
+      profile_image_name: 'person.circle.fill',
+      availability: 'Flexible',
+      favorite_crag: null,
+      does_bouldering: true,
+      does_sport: true,
+      does_trad: false,
+      does_indoor: true,
+      does_outdoor: false,
+      // Default preferences
+      min_age_preference: 20,
+      max_age_preference: 40,
+      gender_preference: 'all genders',
+      max_distance_km: 50,
+    };
+
+    const { data: newProfile, error: createError } = await supabase
+      .from('profiles')
+      .insert([defaultProfile])
+      .select()
+      .single();
+
+    if (createError) {
+      console.error('Error creating profile:', createError);
+      throw createError;
+    }
+
+    return transformProfile(newProfile);
+  } catch (error) {
+    console.error('Error in getOrCreateUserProfile:', error);
+    throw error;
+  }
+}
+
+/**
+ * Update user profile by device ID
+ */
+async function updateUserProfile(deviceId, profileData) {
+  try {
+    const dbData = transformProfileToDb(profileData);
+
+    const { data, error } = await supabase
+      .from('profiles')
+      .update(dbData)
+      .eq('device_id', deviceId)
+      .select()
+      .single();
+
+    if (error) {
+      console.error('Error updating profile:', error);
+      throw error;
+    }
+
+    return transformProfile(data);
+  } catch (error) {
+    console.error('Error in updateUserProfile:', error);
+    throw error;
+  }
+}
+
 module.exports = {
   getStack,
+  getOrCreateUserProfile,
+  updateUserProfile,
 };
