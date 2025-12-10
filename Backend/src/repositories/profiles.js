@@ -73,13 +73,18 @@ function transformProfileToDb(profile) {
  */
 async function getStack(deviceId = null) {
   try {
+    console.log(`[getStack] Starting query for deviceId: ${deviceId || 'none'}`);
+    
     let query = supabase
       .from('profiles')
-      .select('*');
+      .select('*', { count: 'exact' });
 
     // Exclude user's own profile if deviceId is provided
+    // Note: We use .or() to include profiles with NULL device_id (seed data)
+    // because .neq() excludes NULL values in SQL
     if (deviceId) {
-      query = query.neq('device_id', deviceId);
+      console.log(`[getStack] Excluding profiles with device_id: ${deviceId}`);
+      query = query.or(`device_id.is.null,device_id.neq.${deviceId}`);
     }
 
     // Get passed profile IDs to exclude them
@@ -88,39 +93,54 @@ async function getStack(deviceId = null) {
       const { getPassedProfileIds } = require('./swipes');
       try {
         passedProfileIds = await getPassedProfileIds(deviceId);
+        console.log(`[getStack] Found ${passedProfileIds.length} passed profile IDs to exclude`);
       } catch (error) {
         // If swipes table doesn't exist yet, just log and continue
-        console.warn('Could not fetch passed profiles (swipes table may not exist):', error.message);
+        console.warn('[getStack] Could not fetch passed profiles (swipes table may not exist):', error.message);
       }
     }
 
-    const { data, error } = await query.order('created_at', { ascending: false });
+    const { data, error, count } = await query.order('created_at', { ascending: false });
 
     if (error) {
-      console.error('Error fetching profiles from Supabase:', error);
+      console.error('[getStack] Error fetching profiles from Supabase:', error);
+      console.error('[getStack] Error details:', JSON.stringify(error, null, 2));
       throw error;
     }
 
+    console.log(`[getStack] Query returned ${count || 0} total profiles in database`);
+    console.log(`[getStack] Query returned ${data?.length || 0} profiles after filtering by device_id`);
+
     if (!data || data.length === 0) {
-      console.warn('No profiles found in database');
+      console.warn('[getStack] No profiles found in database after query');
+      if (count === 0) {
+        console.warn('[getStack] Database appears to be empty - no profiles exist');
+      } else if (deviceId && count > 0) {
+        console.warn(`[getStack] All ${count} profiles were filtered out (likely all match device_id: ${deviceId})`);
+      }
       return [];
     }
 
     // Filter out passed profiles
     let filteredData = data;
     if (passedProfileIds.length > 0) {
+      const beforeFilterCount = filteredData.length;
       filteredData = data.filter(profile => {
         // Get the integer ID of the profile
         const profileId = typeof profile.id === 'number' ? profile.id : parseInt(String(profile.id), 10);
         // Check if this profile ID is in the passed list
         return !passedProfileIds.includes(profileId);
       });
+      console.log(`[getStack] Filtered out ${beforeFilterCount - filteredData.length} passed profiles`);
     }
+
+    console.log(`[getStack] Returning ${filteredData.length} profiles after all filtering`);
 
     // Transform database profiles to frontend format
     return filteredData.map(transformProfile);
   } catch (error) {
-    console.error('Error in getStack:', error);
+    console.error('[getStack] Error in getStack:', error);
+    console.error('[getStack] Error stack:', error.stack);
     throw error;
   }
 }
