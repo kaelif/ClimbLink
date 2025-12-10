@@ -11,13 +11,31 @@ struct EditProfileView: View {
     @StateObject private var viewModel: EditProfileViewModel
     @Environment(\.dismiss) var dismiss
     
-    init(deviceId: String) {
+    let isFirstTimeSetup: Bool
+    let onSetupComplete: () -> Void
+    
+    init(deviceId: String, isFirstTimeSetup: Bool = false, onSetupComplete: @escaping () -> Void = {}) {
+        self.isFirstTimeSetup = isFirstTimeSetup
+        self.onSetupComplete = onSetupComplete
         _viewModel = StateObject(wrappedValue: EditProfileViewModel(deviceId: deviceId))
     }
     
     var body: some View {
         NavigationView {
             Form {
+                if isFirstTimeSetup {
+                    Section {
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("Welcome to ClimbLink! 🧗")
+                                .font(.headline)
+                            Text("Let's set up your profile so other climbers can find you.")
+                                .font(.subheadline)
+                                .foregroundColor(.secondary)
+                        }
+                        .padding(.vertical, 8)
+                    }
+                }
+                
                 Section(header: Text("Basic Information")) {
                     TextField("Name", text: $viewModel.name)
                     Stepper("Age: \(viewModel.age)", value: $viewModel.age, in: 18...100)
@@ -58,19 +76,25 @@ struct EditProfileView: View {
                     }
                 }
             }
-            .navigationTitle("Edit Profile")
+            .navigationTitle(isFirstTimeSetup ? "Set Up Your Profile" : "Edit Profile")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .navigationBarLeading) {
-                    Button("Cancel") {
-                        dismiss()
+                // Only show cancel button if not first time setup
+                if !isFirstTimeSetup {
+                    ToolbarItem(placement: .navigationBarLeading) {
+                        Button("Cancel") {
+                            dismiss()
+                        }
                     }
                 }
                 ToolbarItem(placement: .navigationBarTrailing) {
-                    Button("Save") {
+                    Button(isFirstTimeSetup ? "Continue" : "Save") {
                         Task {
                             await viewModel.saveProfile()
                             if !viewModel.isLoading && viewModel.errorMessage == nil {
+                                if isFirstTimeSetup {
+                                    onSetupComplete()
+                                }
                                 dismiss()
                             }
                         }
@@ -78,6 +102,7 @@ struct EditProfileView: View {
                     .disabled(viewModel.isLoading)
                 }
             }
+            .interactiveDismissDisabled(isFirstTimeSetup) // Prevent swipe to dismiss on first setup
             .alert("Error", isPresented: .constant(viewModel.errorMessage != nil)) {
                 Button("OK") {
                     viewModel.errorMessage = nil
