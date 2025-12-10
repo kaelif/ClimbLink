@@ -10,6 +10,20 @@ import SwiftUI
 struct PartnerDetailView: View {
     let partner: ClimbingPartner
     @Environment(\.dismiss) var dismiss
+    @State private var otherDeviceId: String? = nil
+    @State private var isLoadingDeviceId = false
+    @State private var showChat = false
+    
+    private let messageService = MessageService()
+    
+    private func getDeviceId() -> String {
+        if let saved = UserDefaults.standard.string(forKey: "deviceId") {
+            return saved
+        }
+        let id = UIDevice.current.identifierForVendor?.uuidString ?? UUID().uuidString
+        UserDefaults.standard.set(id, forKey: "deviceId")
+        return id
+    }
     
     var body: some View {
         NavigationView {
@@ -118,6 +132,29 @@ struct PartnerDetailView: View {
                                 }
                             }
                         }
+                        
+                        Divider()
+                        
+                        // Message Button
+                        Button(action: {
+                            loadDeviceIdAndShowChat()
+                        }) {
+                            HStack {
+                                if isLoadingDeviceId {
+                                    ProgressView()
+                                } else {
+                                    Image(systemName: "message.fill")
+                                    Text("Send Message")
+                                        .fontWeight(.semibold)
+                                }
+                            }
+                            .frame(maxWidth: .infinity)
+                            .padding()
+                            .background(Color.blue)
+                            .foregroundColor(.white)
+                            .cornerRadius(12)
+                        }
+                        .disabled(isLoadingDeviceId)
                     }
                     .padding()
                 }
@@ -129,6 +166,20 @@ struct PartnerDetailView: View {
                     Button("Done") {
                         dismiss()
                     }
+                }
+            }
+            .sheet(isPresented: $showChat) {
+                if let otherDeviceId = otherDeviceId {
+                    NavigationView {
+                        ChatView(
+                            deviceId: getDeviceId(),
+                            otherDeviceId: otherDeviceId,
+                            otherUserName: partner.name,
+                            otherUserImage: partner.profileImageName
+                        )
+                    }
+                } else {
+                    EmptyView()
                 }
             }
         }
@@ -193,6 +244,34 @@ struct WrappingHStack<Item: Hashable, Content: View>: View {
                 binding.wrappedValue = rect.size.height
             }
             return .clear
+        }
+    }
+    
+    private func loadDeviceIdAndShowChat() {
+        guard !isLoadingDeviceId else { return }
+        isLoadingDeviceId = true
+        
+        Task {
+            do {
+                if let fetchedDeviceId = try await messageService.getDeviceId(from: partner.id) {
+                    await MainActor.run {
+                        self.otherDeviceId = fetchedDeviceId
+                        self.isLoadingDeviceId = false
+                        self.showChat = true
+                    }
+                } else {
+                    await MainActor.run {
+                        self.isLoadingDeviceId = false
+                        // Show error - profile not found or no device ID
+                    }
+                }
+            } catch {
+                await MainActor.run {
+                    self.isLoadingDeviceId = false
+                    // Show error
+                    print("Error loading device ID: \(error)")
+                }
+            }
         }
     }
 }

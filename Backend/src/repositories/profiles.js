@@ -73,49 +73,104 @@ function transformProfileToDb(profile) {
  */
 async function getStack(deviceId = null) {
   try {
+    console.log(`[${new Date().toISOString()}] getStack: Fetching profiles (deviceId: ${deviceId || 'none'})...`);
+    
     let query = supabase
       .from('profiles')
       .select('*');
 
     // Exclude user's own profile if deviceId is provided
+    // Only filter if device_id column exists and has values
+    // Note: We'll filter in memory after fetching to handle null device_id values gracefully
     if (deviceId) {
-      query = query.neq('device_id', deviceId);
+      console.log(`[${new Date().toISOString()}] getStack: Will exclude profiles with device_id = ${deviceId} (filtering after fetch)`);
     }
 
     // Get passed profile IDs to exclude them
     let passedProfileIds = [];
     if (deviceId) {
-      const { getPassedProfileIds } = require('./swipes');
       try {
+        const { getPassedProfileIds } = require('./swipes');
         passedProfileIds = await getPassedProfileIds(deviceId);
+        console.log(`[${new Date().toISOString()}] getStack: Found ${passedProfileIds.length} passed profile IDs to exclude`);
       } catch (error) {
         // If swipes table doesn't exist yet, just log and continue
-        console.warn('Could not fetch passed profiles (swipes table may not exist):', error.message);
+        console.warn(`[${new Date().toISOString()}] Could not fetch passed profiles (swipes table may not exist):`, error.message);
       }
     }
 
     const { data, error } = await query.order('created_at', { ascending: false });
 
     if (error) {
-      console.error('Error fetching profiles from Supabase:', error);
+      console.error(`[${new Date().toISOString()}] Error fetching profiles from Supabase:`, error);
+      // If the error is about device_id column not existing, try without filtering
+      if (error.message && (error.message.includes('device_id') || error.message.includes('column') || error.code === 'PGRST116')) {
+        console.log(`[${new Date().toISOString()}] device_id column may not exist, fetching all profiles without device_id filter...`);
+        const { data: allData, error: allError } = await supabase
+          .from('profiles')
+          .select('*')
+          .order('created_at', { ascending: false });
+        
+        if (allError) {
+          console.error(`[${new Date().toISOString()}] Error fetching all profiles:`, allError);
+          throw allError;
+        }
+        
+        console.log(`[${new Date().toISOString()}] getStack: Fetched ${allData?.length || 0} profiles (without device_id filter)`);
+        if (!allData || allData.length === 0) {
+          return [];
+        }
+        // Still filter passed profiles if we have them
+        let filteredData = allData;
+        if (passedProfileIds.length > 0) {
+          const beforeCount = filteredData.length;
+          filteredData = allData.filter(profile => {
+            const profileId = typeof profile.id === 'number' ? profile.id : parseInt(String(profile.id), 10);
+            return !passedProfileIds.includes(profileId);
+          });
+          console.log(`[${new Date().toISOString()}] getStack: Filtered out ${beforeCount - filteredData.length} passed profiles. Remaining: ${filteredData.length}`);
+        }
+        return filteredData.map(transformProfile);
+      }
       throw error;
     }
 
+    console.log(`[${new Date().toISOString()}] getStack: Fetched ${data?.length || 0} profiles from database`);
+
     if (!data || data.length === 0) {
-      console.warn('No profiles found in database');
+      console.warn(`[${new Date().toISOString()}] No profiles found in database`);
       return [];
     }
 
-    // Filter out passed profiles
+    // Filter out user's own profile (if deviceId provided and profile has device_id set)
     let filteredData = data;
-    if (passedProfileIds.length > 0) {
+    if (deviceId) {
+      const beforeCount = filteredData.length;
       filteredData = data.filter(profile => {
+        // Only exclude if profile has a device_id set AND it matches the user's deviceId
+        // This allows profiles with null/missing device_id to show up
+        const profileDeviceId = profile.device_id;
+        if (profileDeviceId === null || profileDeviceId === undefined || profileDeviceId === '') {
+          return true; // Include profiles without device_id
+        }
+        return profileDeviceId !== deviceId; // Exclude only if device_id matches
+      });
+      console.log(`[${new Date().toISOString()}] getStack: Filtered out ${beforeCount - filteredData.length} profiles with matching device_id. Remaining: ${filteredData.length}`);
+    }
+
+    // Filter out passed profiles
+    if (passedProfileIds.length > 0) {
+      const beforeCount = filteredData.length;
+      filteredData = filteredData.filter(profile => {
         // Get the integer ID of the profile
         const profileId = typeof profile.id === 'number' ? profile.id : parseInt(String(profile.id), 10);
         // Check if this profile ID is in the passed list
         return !passedProfileIds.includes(profileId);
       });
+      console.log(`[${new Date().toISOString()}] getStack: Filtered out ${beforeCount - filteredData.length} passed profiles. Remaining: ${filteredData.length}`);
     }
+
+    console.log(`[${new Date().toISOString()}] getStack: Returning ${filteredData.length} profiles after filtering`);
 
     // Transform database profiles to frontend format
     return filteredData.map(transformProfile);
